@@ -4,9 +4,14 @@ on:
   workflow_dispatch:  # Manueller Start über GitHub UI
     inputs:
       issue_labels:
-        description: 'Filter Issues nach Labels (optional)'
+        description: 'Filter Issues nach Labels (optional, leer = alle Issues)'
         required: false
-        default: 'bug,enhancement'
+        default: ''
+      create_demo_issue:
+        description: 'Demo-Issue erstellen falls keine vorhanden?'
+        required: false
+        default: 'true'
+        type: boolean
 
 permissions:
   contents: write
@@ -28,35 +33,143 @@ jobs:
       with:
         node-version: '18'
     
-    - name: Get Open Issues
+    - name: Test GitHub API Connection
+      id: api-test
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ secrets.PTA_TOKEN }}
+        script: |
+          try {
+            // Test API Verbindung
+            const { data: repo } = await github.rest.repos.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            
+            console.log(`✅ API Verbindung erfolgreich - Repository: ${repo.full_name}`);
+            console.log(`📊 Repository Stats: ${repo.open_issues_count} offene Issues`);
+            
+            // Test User-Berechtigung
+            const { data: user } = await github.rest.users.getAuthenticated();
+            console.log(`👤 Authenticated as: ${user.login}`);
+            
+            // Test Issues API Zugriff
+            const testCall = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'all',
+              per_page: 1
+            });
+            
+            console.log(`🔍 Issues API funktioniert - Zugriff auf ${testCall.data.length > 0 ? 'Issues verfügbar' : 'Repository hat keine Issues'}`);
+            
+          } catch (error) {
+            console.log(`❌ API Test fehlgeschlagen: ${error.message}`);
+            console.log(`🔧 Status: ${error.status}`);
+            console.log(`📝 Details: ${JSON.stringify(error.response?.data || 'Keine Details verfügbar')}`);
+            core.setFailed(`GitHub API nicht erreichbar: ${error.message}`);
+          }
+
+    - name: Get Open Issues (Flexible Search)
       id: get-issues
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.PTA_TOKEN }}
         script: |
-          const { data: issues } = await github.rest.issues.listForRepo({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            state: 'open',
-            labels: '${{ github.event.inputs.issue_labels }}',
-            per_page: 10
-          });
+          let selectedIssue = null;
           
-          // Filtere nur Issues (keine Pull Requests)
-          const realIssues = issues.filter(issue => !issue.pull_request);
-          
-          if (realIssues.length === 0) {
-            core.setFailed('Keine offenen Issues gefunden');
-            return;
+          try {
+            // Schritt 1: Versuche mit spezifischen Labels (aus Input)
+            const inputLabels = '${{ github.event.inputs.issue_labels }}';
+            
+            if (inputLabels && inputLabels.trim() !== '') {
+              console.log(`🏷️ Suche Issues mit Labels: ${inputLabels}`);
+              const { data: labeledIssues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: inputLabels,
+                per_page: 20
+              });
+              
+              const realLabeledIssues = labeledIssues.filter(issue => !issue.pull_request);
+              console.log(`📋 Gefunden: ${realLabeledIssues.length} Issues mit spezifischen Labels`);
+              
+              if (realLabeledIssues.length > 0) {
+                selectedIssue = realLabeledIssues[0];
+              }
+            }
+            
+            // Schritt 2: Falls keine gefunden, suche ALLE offenen Issues
+            if (!selectedIssue) {
+              console.log(`🔍 Erweitere Suche auf ALLE offenen Issues...`);
+              const { data: allIssues } = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 50,
+                sort: 'created',
+                direction: 'asc'  // Älteste zuerst
+              });
+              
+              const realIssues = allIssues.filter(issue => !issue.pull_request);
+              console.log(`📊 Alle offenen Issues: ${allIssues.length} (davon ${realIssues.length} echte Issues, ${allIssues.length - realIssues.length} Pull Requests)`);
+              
+              if (realIssues.length > 0) {
+                selectedIssue = realIssues[0];
+                console.log(`📝 Verfügbare Issues:`);
+                realIssues.slice(0, 5).forEach((issue, index) => {
+                  console.log(`  ${index + 1}. #${issue.number}: ${issue.title}`);
+                });
+              }
+            }
+            
+            // Schritt 3: Falls immer noch keine Issues, erstelle ein Demo-Issue (optional)
+            if (!selectedIssue && '${{ github.event.inputs.create_demo_issue }}' === 'true') {
+              console.log(`⚠️ Keine offenen Issues gefunden. Erstelle Demo-Issue...`);
+              
+              const { data: demoIssue } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: '🤖 Demo Issue für AI Workflow Test',
+                body: `Dieses Issue wurde automatisch erstellt um den AI-Workflow zu testen.
+                
+**Aufgabe:** Verbessere die README.md Datei mit aktuellen Informationen
+**Typ:** Enhancement  
+**Priorität:** Niedrig
+
+**Was zu tun ist:**
+- Aktualisiere die Dokumentation
+- Füge ein Inhaltsverzeichnis hinzu
+- Verbessere die Formatierung
+- Füge Badges oder Status-Informationen hinzu
+
+*Dieses Issue kann automatisch vom AI-Workflow gelöst werden.*`,
+                labels: ['enhancement', 'documentation', 'ai-created']
+              });
+              
+              selectedIssue = demoIssue;
+              console.log(`✨ Demo-Issue erstellt: #${demoIssue.number}`);
+            }
+            
+            // Output setzen
+            if (selectedIssue) {
+              core.setOutput('issue-number', selectedIssue.number);
+              core.setOutput('issue-title', selectedIssue.title);
+              core.setOutput('issue-body', selectedIssue.body || '');
+              
+              console.log(`🎯 Ausgewähltes Issue: #${selectedIssue.number} - ${selectedIssue.title}`);
+              console.log(`📄 Issue Body Preview: ${(selectedIssue.body || 'Keine Beschreibung').substring(0, 100)}...`);
+            } else {
+              core.setFailed('Konnte kein Issue finden oder erstellen');
+            }
+            
+          } catch (error) {
+            console.log(`❌ Fehler beim Laden der Issues: ${error.message}`);
+            console.log(`🔧 Status: ${error.status}`);
+            console.log(`📊 Error Details:`, error.response?.data);
+            core.setFailed(`Issue-Suche fehlgeschlagen: ${error.message}`);
           }
-          
-          // Wähle das älteste Issue
-          const selectedIssue = realIssues[0];
-          core.setOutput('issue-number', selectedIssue.number);
-          core.setOutput('issue-title', selectedIssue.title);
-          core.setOutput('issue-body', selectedIssue.body || '');
-          
-          console.log(`Ausgewähltes Issue: #${selectedIssue.number} - ${selectedIssue.title}`);
     
     - name: Analyze Issue Content
       id: analyze
