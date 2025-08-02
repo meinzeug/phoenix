@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       create_issues:
-        description: 'Issues aus Roadmap erstellen?'
+        description: 'Issues aus Roadmap automatisch erstellen?'
         required: false
         default: 'true'
         type: boolean
@@ -16,7 +16,7 @@ permissions:
 jobs:
   generate-roadmap:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v4
@@ -27,207 +27,70 @@ jobs:
       id: read-readme
       run: |
         if [ -f "README.md" ]; then
-          echo "📖 README.md gefunden, analysiere Projekt-Konzept..."
           README_CONTENT=$(cat README.md)
-          echo "✅ README.md gelesen: $(echo "$README_CONTENT" | wc -l) Zeilen"
-          
-          # Base64 encode für sichere Übertragung
           README_BASE64=$(echo "$README_CONTENT" | base64 -w 0)
           echo "readme-content=$README_BASE64" >> $GITHUB_OUTPUT
-          
-          # Projekt-Typ erkennen
-          if echo "$README_CONTENT" | grep -i "fastapi\|python\|react" >/dev/null; then
-            echo "🐍 Python/React Projekt erkannt"
-          elif echo "$README_CONTENT" | grep -i "node\|express\|javascript" >/dev/null; then
-            echo "📦 Node.js Projekt erkannt"
-          else
-            echo "📋 Software-Projekt erkannt"
-          fi
         else
           echo "❌ README.md nicht gefunden!"
           exit 1
         fi
 
-    - name: Generate Roadmap with AI (Using Cybersecurity Template Style)
+    - name: Generate Roadmap with AI
       id: generate-roadmap
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API }}
       run: |
-        README_CONTENT=$(echo "${{ steps.read-readme.outputs.readme-content }}" | base64 -d)
-        
-        # AI Models
-        MODELS=("meta-llama/llama-3.2-3b-instruct:free" "mistralai/mistral-7b-instruct:free" "qwen/qwen-2-7b-instruct:free")
-        ROADMAP_CONTENT=""
-        
-        for MODEL in "${MODELS[@]}"; do
-          echo "🤖 Generiere Roadmap mit: $MODEL"
-          
-          # Prompt basiert auf Cybersecurity-Template aber für beliebiges Projekt
-          PROMPT_JSON=$(python3 -c "
-        import json
-        
-        readme_content = '''$README_CONTENT'''
-        
-        system_prompt = 'Du bist ein Senior Software Architect und DevOps Expert. Analysiere Software-Konzepte und erstelle detaillierte Entwicklungs-Roadmaps.\\n\\nKRITISCHES FORMAT (EXAKT befolgen):\\n**PHASE X: Phasenname\\n* [ ] Task Name\\n* Detaillierte technische Beschreibung mit konkreten Befehlen, Tools und Implementierungsdetails\\n\\nEXAMPLE:\\n**PHASE 1: Foundation Setup\\n* [ ] Repository Setup\\n* Erstelle Git Repository mit .gitignore für das Projekt. Setup Branching-Strategie (main/develop/feature). Konfiguriere GitHub Actions für CI/CD Pipeline mit automatischen Tests.\\n\\n* [ ] Development Environment\\n* Setup lokale Entwicklungsumgebung: Python Virtual Environment, installiere Requirements, setup Database Connection, konfiguriere Environment Variables (.env file).\\n\\nANFORDERUNGEN:\\n- Technische Details mit konkreten Befehlen\\n- Moderne Best Practices (Docker, Testing, CI/CD)\\n- Security und Performance Aspekte\\n- Vollständige Implementierungsschritte\\n- Tools und Dependencies spezifizieren'
-        
-        user_prompt = f'Analysiere dieses Software-Konzept und erstelle eine DETAILLIERTE Entwicklungs-Roadmap:\\n\\n{readme_content}\\n\\nErstelle eine vollständige Roadmap mit allen technischen Schritten zur Umsetzung. Jeder Task braucht:\\n1. Klaren Titel\\n2. Detaillierte Beschreibung mit konkreten Befehlen\\n3. Tools und Technologies\\n4. Implementierungsdetails\\n\\nPHASEN sollten logisch aufeinander aufbauen:\\n- Foundation (Setup, Infrastructure)\\n- Backend Development\\n- Frontend Development\\n- Testing & Quality\\n- Deployment & Operations\\n- Advanced Features\\n\\nFormat: **PHASE X: Name\\\\n* [ ] Task\\\\n* Beschreibung\\\\n\\\\n'
-        
-        prompt_data = {
-            'model': '$MODEL',
-            'messages': [
-                {
-                    'role': 'system',
-                    'content': system_prompt
-                },
-                {
-                    'role': 'user', 
-                    'content': user_prompt
-                }
-            ],
-            'temperature': 0.3,
-            'max_tokens': 3500
-        }
-        
-        print(json.dumps(prompt_data, ensure_ascii=False))
-        ")
-          
-          echo "$PROMPT_JSON" > ai_prompt.json
-          
-          # Validiere JSON
-          if ! jq empty ai_prompt.json 2>/dev/null; then
-            echo "❌ JSON ungültig für $MODEL"
-            continue
-          fi
-          
-          # API Call
-          AI_RESPONSE=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
-            -H "Authorization: Bearer $OPENROUTER_API_KEY" \
-            -H "Content-Type: application/json" \
-            -H "HTTP-Referer: https://github.com/${{ github.repository }}" \
-            -H "X-Title: Project Roadmap Generator" \
-            -d @ai_prompt.json)
-          
-          echo "🔍 AI Response Status: $(echo "$AI_RESPONSE" | jq -r '.choices[0].message.content // .error.message // "Unbekannt"' | head -1)"
-          
-          # Prüfe auf Erfolg
-          if echo "$AI_RESPONSE" | jq -e '.error' >/dev/null 2>&1; then
-            ERROR_MSG=$(echo "$AI_RESPONSE" | jq -r '.error.message // "Unbekannter Fehler"')
-            echo "❌ Model $MODEL fehlgeschlagen: $ERROR_MSG"
-            continue
-          else
-            ROADMAP_CONTENT=$(echo "$AI_RESPONSE" | jq -r '.choices[0].message.content' 2>/dev/null || echo "")
-            if [ -n "$ROADMAP_CONTENT" ] && [ "$ROADMAP_CONTENT" != "null" ]; then
-              echo "✅ Roadmap erfolgreich generiert mit $MODEL"
-              break
-            fi
-          fi
-        done
-        
-        # Fallback mit Template-basierter Roadmap
-        if [ -z "$ROADMAP_CONTENT" ] || [ "$ROADMAP_CONTENT" = "null" ]; then
-          echo "⚠️ AI fehlgeschlagen, erstelle Template-basierte Roadmap..."
-          
-          # Analysiere README für Projekt-Typ
-          if echo "$README_CONTENT" | grep -i "fastapi\|python\|django" >/dev/null; then
-            TECH_STACK="Python/FastAPI"
-            BACKEND_SETUP="FastAPI, SQLAlchemy, Alembic Migrations, PostgreSQL"
-          elif echo "$README_CONTENT" | grep -i "node\|express\|javascript" >/dev/null; then
-            TECH_STACK="Node.js/Express"
-            BACKEND_SETUP="Express.js, Sequelize ORM, MongoDB/PostgreSQL"
-          elif echo "$README_CONTENT" | grep -i "react\|vue\|angular" >/dev/null; then
-            TECH_STACK="Frontend Framework"
-            BACKEND_SETUP="REST API Backend"
-          else
-            TECH_STACK="Web Application"
-            BACKEND_SETUP="Backend Framework"
-          fi
-          
-          ROADMAP_CONTENT="# Software Development Roadmap
-Generated from README.md Analysis - Tech Stack: $TECH_STACK
+        cat <<EOM > system_prompt.txt
+Du bist ein Senior Software Architect und DevOps Expert. Analysiere Software-Konzepte und erstelle detaillierte Entwicklungs-Roadmaps.
 
+KRITISCHES FORMAT (EXAKT befolgen):
+## PHASE X: Name
+* [ ] Task
+* Beschreibung
+
+EXAMPLE:
 ## PHASE 1: Foundation Setup
 * [ ] Repository Setup
-* Erstelle Git Repository mit .gitignore für $TECH_STACK. Setup Branching-Strategie (main/develop/feature). Konfiguriere GitHub Actions für CI/CD Pipeline mit automatischen Tests und Deployments.
+* Erstelle Git Repository mit .gitignore für das Projekt. Setup Branching-Strategie.
+* [ ] Development Environment
+* Setup lokale Entwicklungsumgebung.
+EOM
 
-* [ ] Development Environment  
-* Setup lokale Entwicklungsumgebung: Virtual Environment, Package Manager, Database Setup, Environment Variables (.env), lokale Development Server Konfiguration.
+        README_CONTENT=$(echo "${{ steps.read-readme.outputs.readme-content }}" | base64 -d)
 
-* [ ] Database Setup
-* Installiere und konfiguriere Database (PostgreSQL empfohlen). Erstelle Development/Testing/Production Schemas. Setup Migrations-System für Schema-Changes.
+        PROMPT_JSON=$(python3 -c "
+import json
+with open('system_prompt.txt') as f:
+    system_prompt = f.read()
+readme_content = '''$README_CONTENT'''
+prompt_data = {
+    'model': 'meta-llama/llama-3.2-3b-instruct:free',
+    'messages': [
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user', 'content': f'Analysiere dieses Software-Konzept und erstelle eine detaillierte Entwicklungs-Roadmap in Markdown:\\n\\n{readme_content}'}
+    ],
+    'temperature': 0.3,
+    'max_tokens': 3500
+}
+print(json.dumps(prompt_data, ensure_ascii=False))
+        ")
 
-* [ ] Docker Configuration
-* Erstelle Dockerfile für Application. Setup Docker Compose für Development (App + Database + Redis). Konfiguriere Multi-Stage Builds für Production.
+        echo "$PROMPT_JSON" > ai_prompt.json
 
-## PHASE 2: Backend Development
-* [ ] API Framework Setup
-* Implementiere $BACKEND_SETUP. Setup Routing-System, Middleware für CORS/Auth/Logging, Request/Response Validation, Error Handling.
+        AI_RESPONSE=$(curl -s -X POST "https://openrouter.ai/api/v1/chat/completions" \
+          -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+          -H "Content-Type: application/json" \
+          -d @ai_prompt.json)
 
-* [ ] Database Models
-* Entwickle Data Models/Entities basierend auf README-Anforderungen. Implementiere Relationships, Constraints, Indexes. Setup ORM Mappings.
+        ROADMAP_CONTENT=$(echo "$AI_RESPONSE" | jq -r '.choices[0].message.content')
 
-* [ ] Authentication System
-* Implementiere User Registration/Login. JWT Token System, Password Hashing (bcrypt), Role-based Access Control (RBAC), Session Management.
-
-* [ ] Core API Endpoints
-* Entwickle REST API Endpoints für Hauptfunktionen. Implementiere CRUD Operations, Input Validation, Pagination, Search/Filter Funktionen.
-
-## PHASE 3: Frontend Development
-* [ ] Frontend Framework Setup
-* Setup React/Vue/Angular Application. Konfiguriere TypeScript, Routing (React Router), State Management (Redux/Vuex), Build Tools (Vite/Webpack).
-
-* [ ] UI Component Library
-* Implementiere Design System mit wiederverwendbaren Components. Setup CSS Framework (Tailwind/Material-UI), Responsive Design, Theme Support.
-
-* [ ] API Integration
-* Implementiere HTTP Client für Backend Communication. Setup Axios/Fetch with Interceptors, Error Handling, Loading States, Caching.
-
-* [ ] User Interface
-* Entwickle User Interface basierend auf README-Anforderungen. Implementiere Forms, Navigation, Dashboard Views, Mobile Responsive Design.
-
-## PHASE 4: Testing & Quality
-* [ ] Unit Testing
-* Schreibe Unit Tests für Backend (pytest/jest). Test Coverage >90%, Mock Dependencies, Database Tests mit Test-DB.
-
-* [ ] Integration Testing  
-* Implementiere API Integration Tests. Test komplette Request/Response Flows, Database Interactions, Authentication Flows.
-
-* [ ] End-to-End Testing
-* Setup E2E Tests mit Playwright/Cypress. Test kritische User Journeys, Cross-Browser Testing, Mobile Testing.
-
-* [ ] Code Quality
-* Setup ESLint/Prettier/Black für Code Formatting. Pre-commit Hooks, Static Code Analysis, Security Scanning (Bandit/ESLint Security).
-
-## PHASE 5: Deployment & Operations
-* [ ] Production Infrastructure
-* Setup Production Server (Ubuntu 24 LTS). Installiere NGINX als Reverse Proxy, SSL Certificates (Let's Encrypt), Firewall Configuration.
-
-* [ ] CI/CD Pipeline
-* Implementiere GitHub Actions Workflows. Automated Testing, Building, Docker Image Push, Deployment to Production, Rollback Strategies.
-
-* [ ] Monitoring & Logging
-* Setup Application Monitoring (Prometheus/Grafana). Error Tracking (Sentry), Log Aggregation (ELK Stack), Health Checks, Alerting.
-
-* [ ] Backup & Security
-* Implementiere Database Backups (automatisch). Security Headers, HTTPS Enforcement, Rate Limiting, Input Sanitization, Dependency Updates.
-
-## PHASE 6: Advanced Features
-* [ ] Performance Optimization
-* Database Query Optimization, Caching (Redis), CDN Integration, Image Optimization, Lazy Loading, Code Splitting.
-
-* [ ] Security Hardening
-* Security Audit, Penetration Testing, OWASP Top 10 Compliance, Data Encryption, Secure Headers, CSP Implementation.
-
-* [ ] Scalability
-* Load Testing, Database Scaling, Container Orchestration (Kubernetes), Auto-scaling, Performance Monitoring.
-
-* [ ] Business Features
-* User Analytics, Email Notifications, Export Functions, API Documentation (Swagger), Admin Dashboard."
+        if [ -z "$ROADMAP_CONTENT" ] || [ "$ROADMAP_CONTENT" = "null" ]; then
+          echo "❌ KI konnte keine Roadmap generieren. Abbruch!"
+          exit 1
         fi
-        
-        # Speichere Roadmap
+
         echo "$ROADMAP_CONTENT" > roadmap.md
         echo "roadmap-content=$ROADMAP_CONTENT" >> $GITHUB_OUTPUT
-        echo "🎯 Roadmap generiert und in roadmap.md gespeichert"
 
     - name: Commit Roadmap
       run: |
@@ -237,15 +100,8 @@ Generated from README.md Analysis - Tech Stack: $TECH_STACK
         if git diff --staged --quiet; then
           echo "🔄 Keine Änderungen an roadmap.md"
         else
-          git commit -m "🗺️ Generate detailed project roadmap from README.md
-          
-          - AI-generated development roadmap
-          - Technical implementation steps  
-          - Based on README.md project analysis
-          - Ready for issue creation
-          - Generated: $(date)"
+          git commit -m "🗺️ Generate detailed project roadmap from README.md"
           git push
-          echo "✅ Roadmap committed und gepusht"
         fi
 
     - name: Extract Tasks and Create Issues
@@ -255,35 +111,22 @@ Generated from README.md Analysis - Tech Stack: $TECH_STACK
         github-token: ${{ secrets.PTA_TOKEN }}
         script: |
           const roadmapContent = `${{ steps.generate-roadmap.outputs.roadmap-content }}`;
-          
-          console.log('🔍 Parsing komplette Roadmap für Issue-Erstellung...');
-          
-          // Parse Roadmap für ALLE Tasks
           const lines = roadmapContent.split('\n');
           let currentPhase = '';
           let issues = [];
           let i = 0;
-          
           while (i < lines.length) {
             const line = lines[i].trim();
-            
-            // Erkenne Phase
             if (line.startsWith('## PHASE')) {
               currentPhase = line.replace(/^## /, '').trim();
-              console.log(`📋 Phase gefunden: ${currentPhase}`);
-            }
-            
-            // Erkenne Task
-            else if (line.startsWith('* [ ]')) {
+            } else if (line.startsWith('* [ ]')) {
               const taskTitle = line.replace('* [ ]', '').trim();
               let taskDescription = '';
-              
-              // Sammle vollständige Beschreibung
               i++;
               while (i < lines.length) {
                 const nextLine = lines[i].trim();
                 if (nextLine.startsWith('* [ ]') || nextLine.startsWith('## PHASE')) {
-                  i--; // Gehe zurück
+                  i--;
                   break;
                 }
                 if (nextLine.startsWith('*') && !nextLine.startsWith('* [ ]')) {
@@ -293,7 +136,6 @@ Generated from README.md Analysis - Tech Stack: $TECH_STACK
                 }
                 i++;
               }
-              
               if (taskTitle && taskDescription.trim()) {
                 const phaseLabel = currentPhase.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/^phase-\d+-/, '');
                 issues.push({
@@ -302,104 +144,43 @@ Generated from README.md Analysis - Tech Stack: $TECH_STACK
                   phase: currentPhase,
                   labels: ['enhancement', 'roadmap', phaseLabel]
                 });
-                console.log(`✅ Task hinzugefügt: ${taskTitle}`);
               }
             }
             i++;
           }
-          
-          console.log(`🎯 Insgesamt ${issues.length} Tasks aus Roadmap extrahiert`);
-          console.log(`📊 Erstelle ALLE ${issues.length} Issues...`);
-          
-          // Erstelle ALLE Issues aus der Roadmap
-          let createdCount = 0;
-          let errorCount = 0;
-          
+
           for (let index = 0; index < issues.length; index++) {
             const issue = issues[index];
-            try {
-              const issueBody = `## 📋 ${issue.phase}
+            const issueBody = `## 📋 ${issue.phase}\n\n${issue.description}\n\n## ✅ Definition of Done\n- [ ] Implementierung abgeschlossen\n- [ ] Tests geschrieben und bestanden\n- [ ] Code-Review durchgeführt\n- [ ] Dokumentation aktualisiert\n- [ ] Ready for Production\n\n## 🔗 Roadmap\nDiese Aufgabe ist Teil der [Project Roadmap](./roadmap.md)\n**Task ${index + 1} von ${issues.length}**\n\n---\n*Auto-generiert aus README.md Analysis*`;
 
-${issue.description}
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: issue.title,
+              body: issueBody,
+              labels: issue.labels,
+              assignees: []
+            });
 
-## ✅ Definition of Done
-- [ ] Implementierung abgeschlossen  
-- [ ] Tests geschrieben und bestanden
-- [ ] Code-Review durchgeführt
-- [ ] Dokumentation aktualisiert
-- [ ] Ready for Production
-
-## 🔗 Roadmap
-Diese Aufgabe ist Teil der [Project Roadmap](./roadmap.md)  
-**Task ${index + 1} von ${issues.length}**
-
----
-*Auto-generiert aus README.md Analysis*`;
-              
-              const { data: createdIssue } = await github.rest.issues.create({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                title: issue.title,
-                body: issueBody,
-                labels: issue.labels,
-                assignees: []
-              });
-              
-              console.log(`✅ Issue #${createdIssue.number}: ${issue.title}`);
-              createdCount++;
-              
-              // Moderate Pause um GitHub API nicht zu überlasten
-              if (index < issues.length - 1) { // Keine Pause beim letzten Issue
-                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 Sekunde
-              }
-              
-            } catch (error) {
-              console.log(`❌ Issue Creation Error für "${issue.title}": ${error.message}`);
-              errorCount++;
-              
-              // Bei Rate-Limit oder anderen API-Fehlern, längere Pause und weiter versuchen
-              if (error.message.includes('rate') || error.message.includes('limit')) {
-                console.log('⏱️ Rate-Limit erreicht, warte 10 Sekunden...');
-                await new Promise(resolve => setTimeout(resolve, 10000));
-              } else {
-                // Bei anderen Fehlern kurz warten und weiter
-                await new Promise(resolve => setTimeout(resolve, 2000));
-              }
-            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
-          
-          console.log(`🎉 Issue Creation abgeschlossen!`);
-          console.log(`✅ Erfolgreich erstellt: ${createdCount}`);
-          console.log(`❌ Fehler: ${errorCount}`);
-          console.log(`📊 Total: ${issues.length} Tasks aus Roadmap`);
-          
-          return { created: createdCount, errors: errorCount, total: issues.length };
 
     - name: Create Summary Issue
       uses: actions/github-script@v7
       with:
         github-token: ${{ secrets.PTA_TOKEN }}
         script: |
-          const { data: summaryIssue } = await github.rest.issues.create({
+          await github.rest.issues.create({
             owner: context.repo.owner,
             repo: context.repo.repo,
             title: '🗺️ Project Roadmap Generated from README.md',
             body: `## 🎉 Development Roadmap erstellt!
 
-Eine detaillierte Entwicklungs-Roadmap wurde aus der **README.md** generiert:
+📋 [roadmap.md](./roadmap.md) – automatisch generiert aus der README.md
 
-📋 **[roadmap.md](./roadmap.md)** - Vollständige Development Roadmap
+Alle Tasks wurden als Issues erstellt (sofern aktiviert).
 
-## 🚀 Nächste Schritte
-
-1. **Review**: Überprüfe die generierte Roadmap
-2. **Customize**: Passe Tasks an deine spezifischen Anforderungen an  
-3. **Development**: Starte mit den Foundation Tasks
-4. **Issues**: Alle Tasks wurden als Issues erstellt (Label: \`roadmap\`)
-
-## 📊 Generation Info
-- **Quelle**: README.md Analysis
-- **AI Model**: Multiple Fallback Models (OpenRouter)
-- **Format**: Cybersecurity Platform Template Style
-- **Issues**: ${{ github.event.inputs.create_issues == 'true' && 'Alle Tasks als Issues erstellt' || 'Keine Issues erstellt' }}
-- **Generated**:
+*Powered by OpenRouter + GitHub Actions*`,
+            labels: ['documentation', 'roadmap', 'meta', 'ai-generated'],
+            assignees: []
+          });
