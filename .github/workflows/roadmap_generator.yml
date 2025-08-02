@@ -402,15 +402,4 @@ Eine detaillierte Entwicklungs-Roadmap wurde aus der **README.md** generiert:
 - **AI Model**: Multiple Fallback Models (OpenRouter)
 - **Format**: Cybersecurity Platform Template Style
 - **Issues**: ${{ github.event.inputs.create_issues == 'true' && 'Alle Tasks als Issues erstellt' || 'Keine Issues erstellt' }}
-- **Generated**: $(new Date().toISOString())
-
-## 🔄 Updates
-Um die Roadmap zu aktualisieren, führe diesen Workflow erneut aus.
-
----
-*Powered by AI + GitHub Actions*`,
-            labels: ['documentation', 'roadmap', 'meta', 'ai-generated'],
-            assignees: []
-          });
-          
-          console.log(`📋 Summary Issue erstellt: #${summaryIssue.number}`);
+- **Generated**:
