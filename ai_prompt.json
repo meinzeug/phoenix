@@ -1,0 +1,15 @@
+{
+  "model": "qwen/qwen3-coder:free",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Du bist ein Expert-Programmierer der GitHub Issues automatisch löst. Analysiere das Issue und den Repository-Kontext und erstelle konkrete Lösungen. Antworte im JSON Format mit: {\"solution_type\": \"...\", \"files_to_change\": [{\"path\": \"...\", \"action\": \"create|modify|delete\", \"content\": \"...\"}], \"explanation\": \"...\"}"
+    },
+    {
+      "role": "user",
+      "content": "ISSUE TITEL: ${ISSUE_TITLE}\n\nISSUE BESCHREIBUNG:\n${ISSUE_BODY}\n\nREPOSITORY KONTEXT:\n${REPO_CONTEXT}\n\nBitte erstelle eine konkrete Lösung für dieses Issue."
+    }
+  ],
+  "temperature": 0.3,
+  "max_tokens": 2000
+}
