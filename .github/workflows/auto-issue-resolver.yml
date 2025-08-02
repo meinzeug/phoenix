@@ -131,21 +131,9 @@ jobs:
               const { data: demoIssue } = await github.rest.issues.create({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                title: '🤖 Demo Issue für AI Workflow Test',
-                body: `Dieses Issue wurde automatisch erstellt um den AI-Workflow zu testen.
-                
-**Aufgabe:** Verbessere die README.md Datei mit aktuellen Informationen
-**Typ:** Enhancement  
-**Priorität:** Niedrig
-
-**Was zu tun ist:**
-- Aktualisiere die Dokumentation
-- Füge ein Inhaltsverzeichnis hinzu
-- Verbessere die Formatierung
-- Füge Badges oder Status-Informationen hinzu
-
-*Dieses Issue kann automatisch vom AI-Workflow gelöst werden.*`,
-                labels: ['enhancement', 'documentation', 'ai-created']
+                title: "🤖 Demo Issue für AI Workflow Test",
+                body: "Dieses Issue wurde automatisch erstellt um den AI-Workflow zu testen.\n\nAufgabe: Verbessere die README.md Datei mit aktuellen Informationen\nTyp: Enhancement\nPriorität: Niedrig\n\nWas zu tun ist:\n- Aktualisiere die Dokumentation\n- Füge ein Inhaltsverzeichnis hinzu\n- Verbessere die Formatierung\n- Füge Badges oder Status-Informationen hinzu\n\nDieses Issue kann automatisch vom AI-Workflow gelöst werden.",
+                labels: ["enhancement", "documentation", "ai-created"]
               });
               
               selectedIssue = demoIssue;
