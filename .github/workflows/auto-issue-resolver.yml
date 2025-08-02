@@ -165,8 +165,8 @@ jobs:
       with:
         github-token: ${{ secrets.PTA_TOKEN }}
         script: |
-          const issueTitle = '${{ steps.get-issues.outputs.issue-title }}';
-          const issueBody = '${{ steps.get-issues.outputs.issue-body }}';
+          const issueTitle = `${{ steps.get-issues.outputs.issue-title }}`;
+          const issueBody = `${{ steps.get-issues.outputs.issue-body }}`.replace(/\r?\n/g, ' ').replace(/'/g, "\\'").replace(/"/g, '\\"');
           
           // Einfache Analyse für verschiedene Issue-Typen
           let changes = [];
@@ -187,6 +187,16 @@ jobs:
               type: 'dependency-update',
               description: 'Dependencies aktualisieren'
             });
+          } else if (issueTitle.toLowerCase().includes('login') || issueTitle.toLowerCase().includes('auth')) {
+            changes.push({
+              type: 'authentication-feature',
+              description: 'Login/Authentication System implementieren'
+            });
+          } else if (issueTitle.toLowerCase().includes('page') || issueTitle.toLowerCase().includes('ui')) {
+            changes.push({
+              type: 'ui-implementation',
+              description: 'UI/Page Implementation'
+            });
           } else {
             changes.push({
               type: 'general-fix',
@@ -196,6 +206,9 @@ jobs:
           
           core.setOutput('changes', JSON.stringify(changes));
           core.setOutput('branch-name', branchName);
+          
+          console.log(`Analyze Results: ${JSON.stringify(changes)}`);
+          console.log(`Branch Name: ${branchName}`);
     
     - name: Create Feature Branch
       run: |
