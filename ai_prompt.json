@@ -1,15 +1,15 @@
 {
-  "model": "qwen/qwen3-coder:free",
+  "model": "qwen/qwen-2-7b-instruct:free",
   "messages": [
     {
       "role": "system",
-      "content": "Du bist ein Expert-Programmierer der GitHub Issues automatisch löst. Analysiere das Issue und den Repository-Kontext und erstelle konkrete Lösungen. Antworte im JSON Format mit: {\"solution_type\": \"...\", \"files_to_change\": [{\"path\": \"...\", \"action\": \"create|modify|delete\", \"content\": \"...\"}], \"explanation\": \"...\"}"
+      "content": "Du bist ein Expert-Programmierer der GitHub Issues automatisch löst. Analysiere das Issue und den Repository-Kontext und erstelle konkrete Lösungen. Antworte im JSON Format mit: {\\"solution_type\\": \\"...\\", \\"files_to_change\\": [{\\"path\\": \\"...\\", \\"action\\": \\"create|modify|delete\\", \\"content\\": \\"...\\"}], \\"explanation\\": \\"...\\"}"
     },
     {
       "role": "user",
-      "content": "ISSUE TITEL: ${ISSUE_TITLE}\n\nISSUE BESCHREIBUNG:\n${ISSUE_BODY}\n\nREPOSITORY KONTEXT:\n${REPO_CONTEXT}\n\nBitte erstelle eine konkrete Lösung für dieses Issue."
+      "content": "ISSUE TITEL: Login Page\n\nISSUE BESCHREIBUNG:\nImplement a Startsite with Login Form -> Username / Password / Login-Button \"Login\" / Register Link to Register Formular -> Register with Username / Passwort   \n\nREPOSITORY KONTEXT:\n=== Repository Structure === ./windows/runner/win32_window.cpp ./windows/runner/main.cpp ./windows/runner/utils.cpp ./windows/runner/flutter_window.cpp  === Package Files === Keine Standard-Package-Dateien gefunden  === README Preview === # phoenix  A new Flutter project.  ## Getting Started  This project is a starting point for a Flutter application.  A few resources to get you started if this is your first Flutter project:  - [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab) - [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)  For help getting started with Flutter development, view the [online documentation](https://docs.flutter.dev/), which offers tutorials, samples, guidance on mobile development, and a full API reference. <!-- Issue #1 auto-resolved mit AI --> **Letztes AI-Update:** Sat Aug  2 11:24:04 UTC 2025 - Issue: Login Page \n\nBitte erstelle eine konkrete Lösung für dieses Issue."
     }
   ],
   "temperature": 0.3,
-  "max_tokens": 2000
+  "max_tokens": 1500
 }
