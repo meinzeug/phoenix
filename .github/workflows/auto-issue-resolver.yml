@@ -226,9 +226,9 @@ jobs:
       id: ai-solution
       env:
         OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API }}
+        ISSUE_TITLE: ${{ steps.get-issues.outputs.issue-title }}
+        ISSUE_BODY: ${{ steps.get-issues.outputs.issue-body }}
       run: |
-        ISSUE_TITLE="${{ steps.get-issues.outputs.issue-title }}"
-        ISSUE_BODY="${{ steps.get-issues.outputs.issue-body }}"
         REPO_CONTEXT=$(echo "${{ steps.repo-analysis.outputs.repo-context }}" | base64 -d)
         
         # Liste von kostenlosen Models zum Ausprobieren
@@ -238,18 +238,22 @@ jobs:
         for MODEL in "${MODELS[@]}"; do
           echo "🤖 Versuche AI Model: $MODEL"
           
-          # Erstelle AI Prompt
+          # Erstelle AI Prompt - escaping für JSON
+          ISSUE_TITLE_ESCAPED=$(echo "$ISSUE_TITLE" | sed 's/"/\\"/g' | sed "s/'/\\'/g")
+          ISSUE_BODY_ESCAPED=$(echo "$ISSUE_BODY" | sed 's/"/\\"/g' | sed "s/'/\\'/g" | tr '\n' ' ')
+          REPO_CONTEXT_ESCAPED=$(echo "$REPO_CONTEXT" | sed 's/"/\\"/g' | sed "s/'/\\'/g" | tr '\n' ' ')
+          
           cat > ai_prompt.json << EOF
         {
           "model": "$MODEL",
           "messages": [
             {
               "role": "system",
-              "content": "Du bist ein Expert-Programmierer der GitHub Issues automatisch löst. Analysiere das Issue und den Repository-Kontext und erstelle konkrete Lösungen. Antworte im JSON Format mit: {\"solution_type\": \"...\", \"files_to_change\": [{\"path\": \"...\", \"action\": \"create|modify|delete\", \"content\": \"...\"}], \"explanation\": \"...\"}"
+              "content": "Du bist ein Expert-Programmierer der GitHub Issues automatisch löst. Analysiere das Issue und den Repository-Kontext und erstelle konkrete Lösungen. Antworte im JSON Format mit: {\\\"solution_type\\\": \\\"...\\\", \\\"files_to_change\\\": [{\\\"path\\\": \\\"...\\\", \\\"action\\\": \\\"create|modify|delete\\\", \\\"content\\\": \\\"...\\\"}], \\\"explanation\\\": \\\"...\\\"}"
             },
             {
               "role": "user",
-              "content": "ISSUE TITEL: $ISSUE_TITLE\n\nISSUE BESCHREIBUNG:\n$ISSUE_BODY\n\nREPOSITORY KONTEXT:\n$REPO_CONTEXT\n\nBitte erstelle eine konkrete Lösung für dieses Issue."
+              "content": "ISSUE TITEL: $ISSUE_TITLE_ESCAPED\\n\\nISSUE BESCHREIBUNG:\\n$ISSUE_BODY_ESCAPED\\n\\nREPOSITORY KONTEXT:\\n$REPO_CONTEXT_ESCAPED\\n\\nBitte erstelle eine konkrete Lösung für dieses Issue."
             }
           ],
           "temperature": 0.3,
@@ -293,13 +297,13 @@ jobs:
           
           # Intelligente lokale Analyse basierend auf Issue-Titel
           if [[ "$ISSUE_TITLE" == *"README"* ]] || [[ "$ISSUE_TITLE" == *"documentation"* ]]; then
-            AI_CONTENT='{"solution_type": "documentation_update", "files_to_change": [{"path": "README.md", "action": "modify", "content": "# Updated Documentation\n\nThis repository has been automatically updated.\n\n## Features\n- Automated issue resolution\n- AI-powered code generation\n- Continuous integration\n\n## Last Updated\n'$(date)'\n"}], "explanation": "Updated README.md with current information and improved structure"}'
+            AI_CONTENT="{\"solution_type\": \"documentation_update\", \"files_to_change\": [{\"path\": \"README.md\", \"action\": \"modify\", \"content\": \"# Updated Documentation\\n\\nThis repository has been automatically updated.\\n\\n## Features\\n- Automated issue resolution\\n- AI-powered code generation\\n- Continuous integration\\n\\n## Last Updated\\n$(date)\\n\"}], \"explanation\": \"Updated README.md with current information and improved structure\"}"
           elif [[ "$ISSUE_TITLE" == *"bug"* ]] || [[ "$ISSUE_TITLE" == *"fix"* ]]; then
-            AI_CONTENT='{"solution_type": "bug_fix", "files_to_change": [{"path": "BUGFIX.md", "action": "create", "content": "# Bug Fix Report\n\n## Issue: '$ISSUE_TITLE'\n\n## Resolution\nAutomatically resolved by GitHub Actions workflow.\n\n## Date\n'$(date)'\n\n## Status\nFixed\n"}], "explanation": "Created bug fix documentation and resolution tracking"}'
+            AI_CONTENT="{\"solution_type\": \"bug_fix\", \"files_to_change\": [{\"path\": \"BUGFIX.md\", \"action\": \"create\", \"content\": \"# Bug Fix Report\\n\\n## Issue: $ISSUE_TITLE\\n\\n## Resolution\\nAutomatically resolved by GitHub Actions workflow.\\n\\n## Date\\n$(date)\\n\\n## Status\\nFixed\\n\"}], \"explanation\": \"Created bug fix documentation and resolution tracking\"}"
           elif [[ "$ISSUE_TITLE" == *"feature"* ]] || [[ "$ISSUE_TITLE" == *"enhancement"* ]]; then
-            AI_CONTENT='{"solution_type": "feature_implementation", "files_to_change": [{"path": "FEATURES.md", "action": "create", "content": "# Feature Implementation\n\n## New Feature: '$ISSUE_TITLE'\n\n## Description\n'$ISSUE_BODY'\n\n## Implementation Date\n'$(date)'\n\n## Status\nImplemented\n"}], "explanation": "Implemented new feature as requested in the issue"}'
+            AI_CONTENT="{\"solution_type\": \"feature_implementation\", \"files_to_change\": [{\"path\": \"FEATURES.md\", \"action\": \"create\", \"content\": \"# Feature Implementation\\n\\n## New Feature: $ISSUE_TITLE\\n\\n## Description\\n$ISSUE_BODY\\n\\n## Implementation Date\\n$(date)\\n\\n## Status\\nImplemented\\n\"}], \"explanation\": \"Implemented new feature as requested in the issue\"}"
           else
-            AI_CONTENT='{"solution_type": "general_improvement", "files_to_change": [{"path": "CHANGELOG.md", "action": "modify", "content": "# Changelog\n\n## '$(date +%Y-%m-%d)'\n- Resolved issue: '$ISSUE_TITLE'\n- Automated fix applied\n- Repository updated\n\n"}], "explanation": "Applied general improvements and updated changelog"}'
+            AI_CONTENT="{\"solution_type\": \"general_improvement\", \"files_to_change\": [{\"path\": \"CHANGELOG.md\", \"action\": \"modify\", \"content\": \"# Changelog\\n\\n## $(date +%Y-%m-%d)\\n- Resolved issue: $ISSUE_TITLE\\n- Automated fix applied\\n- Repository updated\\n\\n\"}], \"explanation\": \"Applied general improvements and updated changelog\"}"
           fi
         fi
         
